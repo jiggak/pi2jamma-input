@@ -31,8 +31,8 @@ static int keymap[_74x165_BITS] = {
     KEY_Q,         // P2B3
     KEY_LEFT,      // P1Left
     KEY_RIGHT,     // P1Right
-    KEY_ENTER,     // P1B1
-    KEY_BACKSPACE, // P1B2
+    KEY_LEFTCTRL,  // P1B1
+    KEY_LEFTALT,   // P1B2
     KEY_S,         // P2B2
     KEY_A,         // P2B1
     KEY_G,         // P2Right
