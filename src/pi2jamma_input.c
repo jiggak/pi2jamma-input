@@ -4,7 +4,6 @@
 #include <linux/gpio.h>
 // TODO figure out how to use new API, <linux/gpio.h> is depricated
 // #include <linux/gpio/consumer.h>
-#include <linux/kthread.h>
 #include <linux/delay.h>
 
 // #define _74x165_CLK 23 // Pin 16
@@ -17,7 +16,6 @@
 #define _74x165_BITS 24
 
 static struct input_dev *pi2jamma_dev;
-static struct task_struct *pi2jamma_thread;
 
 /* keymap is in order of bits read from pi2jamma */
 static int keymap[_74x165_BITS] = {
@@ -47,7 +45,7 @@ static int keymap[_74x165_BITS] = {
     KEY_6          // P2Coin
 };
 
-uint32_t read_controller_bits(void) {
+static uint32_t pi2jamma_read_buttons(void) {
     uint32_t result = 0;
 
     gpio_set_value(_74x165_CLK, 1);
@@ -73,28 +71,22 @@ uint32_t read_controller_bits(void) {
     return result;
 }
 
-int pi2jamma_polling_thread(void *data) {
+static void pi2jamma_poller(struct input_dev *input) {
     uint32_t bits;
 
-    while (!kthread_should_stop()) {
-        bits = read_controller_bits();
+    bits = pi2jamma_read_buttons();
 
-        // if (bits) {
-        //     printk("Non zero bits %x\n", bits);
-        // }
+    // if (bits) {
+    //     printk("Non zero bits %x\n", bits);
+    // }
 
-        for (int i=0; i<_74x165_BITS; i++) {
-            input_report_key(pi2jamma_dev, keymap[i], bits & 1);
-            bits = bits >> 1;
-        }
-
-        input_sync(pi2jamma_dev);
-
-        // failed attempt at limiting heavy CPU usage
-        // udelay(10000);
+    for (int i=0; i<_74x165_BITS; i++) {
+        input_report_key(pi2jamma_dev, keymap[i], bits & 1);
+        bits = bits >> 1;
     }
 
-    return 0;
+    input_sync(pi2jamma_dev);
+
 }
 
 static int __init pi2jamma_init(void) {
@@ -111,9 +103,19 @@ static int __init pi2jamma_init(void) {
     }
 
     pi2jamma_dev->evbit[0] = BIT_MASK(EV_KEY);
+    // set_bit(EV_REP, pi2jamma_dev->evbit);
     for (int i=0; i<_74x165_BITS; i++) {
         set_bit(keymap[i], pi2jamma_dev->keybit);
     }
+
+    error = input_setup_polling(pi2jamma_dev, pi2jamma_poller);
+    if (error) {
+        printk(KERN_ERR "pi2jamma_input: Unable to set up polling\n");
+        goto err_return;
+    }
+
+    // poll interval in millis
+    input_set_poll_interval(pi2jamma_dev, 10);
 
     error = input_register_device(pi2jamma_dev);
     if (error) {
@@ -161,13 +163,6 @@ static int __init pi2jamma_init(void) {
         goto err_free_gpio;
     }
 
-    pi2jamma_thread = kthread_run(pi2jamma_polling_thread, NULL, "pi2jamma_thread");
-    if (pi2jamma_thread == NULL) {
-        printk(KERN_ERR "pi2jamma_input: Failed to start polling thread\n");
-        error = -1;
-        goto err_free_gpio;
-    }
-
     return 0;
 
 err_free_gpio:
@@ -183,11 +178,10 @@ err_return:
 }
 
 static void __exit pi2jamma_exit(void) {
-    input_unregister_device(pi2jamma_dev);
     gpio_free(_74x165_CLK);
     gpio_free(_74x165_PL);
     gpio_free(_74x165_DIN);
-    kthread_stop(pi2jamma_thread);
+    input_unregister_device(pi2jamma_dev);
 }
 
 module_init(pi2jamma_init);
