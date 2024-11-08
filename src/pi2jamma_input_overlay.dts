@@ -1,0 +1,32 @@
+/dts-v1/;
+/plugin/;
+/ {
+    compatible = "brcm,bcm2835";
+
+    fragment@0 {
+        target-path = "/";
+        __overlay__ {
+            pi2jamma {
+                compatible = "pi2jamma-input";
+                status = "okay";
+
+                clk-gpio = <&gpio 23 0>;
+                pl-gpio = <&gpio 24 0>;
+                din-gpio = <&gpio 22 0>;
+                poll-interval = <10>;
+            };
+        };
+    };
+};
+
+/*
+&{/} {
+    pi2jamma {
+        compatible = "pi2jamma-keys";
+        clk-gpio = <&gpio 23 0>;
+        pl-gpio = <&gpio 24 0>;
+        din-gpio = <&gpio 22 0>;
+        poll-interval = <10>;
+    };
+};
+*/
