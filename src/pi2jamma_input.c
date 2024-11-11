@@ -40,6 +40,36 @@ static int keymap[_74x165_BITS] = {
     KEY_6          // P2Coin
 };
 
+#define SHIFT_KEY_BIT (1<<17) // P1Start
+static int shift_keys_pressed = 0;
+
+static int keymap_shift[_74x165_BITS] = {
+    0,             // P1B3
+    0,             // P1B4
+    0,             // P1B5
+    0,             // P1B6
+    0,             // P2B5
+    0,             // P2B6
+    0,             // P2B4
+    0,             // P2B3
+    KEY_ENTER,     // P1Left
+    KEY_TAB,       // P1Right
+    KEY_5,         // P1B1
+    0,             // P1B2
+    0,             // P2B2
+    0,             // P2B1
+    0,             // P2Right
+    0,             // P2Left
+    0,             // P1Coin
+    0,             // P1Start
+    KEY_GRAVE,     // P1Up
+    KEY_P,         // P1Down
+    0,             // P2Down
+    0,             // P2Up
+    KEY_ESC,       // P2Start
+    0              // P2Coin
+};
+
 static uint32_t pi2jamma_read_buttons(void) {
     uint32_t result = 0;
 
@@ -71,9 +101,25 @@ static void pi2jamma_poller(struct input_dev *input) {
 
     bits = pi2jamma_read_buttons();
 
-    for (int i=0; i<_74x165_BITS; i++) {
-        input_report_key(input_dev, keymap[i], bits & 1);
-        bits = bits >> 1;
+    // if shift key pressed, and one or more non-shift keys pressed
+    if (bits & SHIFT_KEY_BIT && bits ^ SHIFT_KEY_BIT) {
+        shift_keys_pressed = 1;
+        for (int i=0; i<_74x165_BITS; i++) {
+            input_report_key(input_dev, keymap_shift[i], bits & 1);
+            bits = bits >> 1;
+        }
+    } else if (shift_keys_pressed) {
+        // report key-up events for shift keys when shift key released
+
+        shift_keys_pressed = 0;
+        for (int i=0; i<_74x165_BITS; i++) {
+            input_report_key(input_dev, keymap_shift[i], 0);
+        }
+    } else {
+        for (int i=0; i<_74x165_BITS; i++) {
+            input_report_key(input_dev, keymap[i], bits & 1);
+            bits = bits >> 1;
+        }
     }
 
     input_sync(input_dev);
@@ -131,6 +177,9 @@ static int pi2jamma_probe(struct platform_device *pdev) {
     // set_bit(EV_REP, input_dev->evbit);
     for (int i=0; i<_74x165_BITS; i++) {
         set_bit(keymap[i], input_dev->keybit);
+        if (keymap_shift[i]) {
+            set_bit(keymap_shift[i], input_dev->keybit);
+        }
     }
 
     // using input subsystem polling is much nicer on CPU usage vs creating a
@@ -160,10 +209,11 @@ err_free_gpio:
     return error;
 }
 
-static void pi2jamma_shutdown(struct platform_device *pdev) {
+static int pi2jamma_shutdown(struct platform_device *pdev) {
     gpiod_put(clk_gpio);
     gpiod_put(pl_gpio);
     gpiod_put(din_gpio);
+    return 0;
 }
 
 static struct platform_driver pi2jamma_input_device_driver = {
